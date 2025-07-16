@@ -1,0 +1,25 @@
+# Файлы экспорта
+exports/
+
+# Бинарные файлы
+testops-export
+
+# Временные файлы
+*.tmp
+*.log
+
+# Переменные окружения
+.env
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db 
