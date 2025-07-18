@@ -45,10 +45,5 @@ USER appuser
 # Открываем порт
 EXPOSE 9090
 
-# Устанавливаем переменные окружения по умолчанию
-ENV TESTOPS_BASE_URL=https://allure-testops.wb.ru
-ENV EXPORT_PATH=/app/exports
-ENV WEB_PORT=9090
-
 # Запускаем приложение
 CMD ["./testops-export"] 

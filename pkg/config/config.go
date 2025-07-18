@@ -32,7 +32,7 @@ func Load() (*Config, error) {
 	}
 
 	config := &Config{
-		BaseURL:      getEnv("TESTOPS_BASE_URL", "https://allure-testops.wb.ru"),
+		BaseURL:      getEnv("TESTOPS_BASE_URL", "https://your-testops.ru"),
 		Token:        getEnv("TESTOPS_TOKEN", ""),
 		ExportPath:   getEnv("EXPORT_PATH", "./exports"),
 		WebPort:      getEnv("WEB_PORT", "9090"),
@@ -42,6 +42,7 @@ func Load() (*Config, error) {
 		Exports: []models.ExportConfig{
 			{GroupID: 26961091, GroupName: "API"},
 			{GroupID: 24545654, GroupName: "UI"},
+			{GroupID: 30308896, GroupName: "UI-AT"},
 		},
 	}
 
