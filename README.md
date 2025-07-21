@@ -140,6 +140,49 @@ cp -r exports/ backup_exports/
 tar -czf exports_backup_$(date +%Y%m%d).tar.gz exports/
 ```
 
+## Хранение в S3 (MinIO, AWS S3 и др.)
+
+Приложение поддерживает хранение экспортов в S3-совместимых хранилищах (например, MinIO, Яндекс S3, AWS S3).
+
+### Как включить S3
+
+1. В .env или переменных окружения укажите:
+   ```
+   S3_ENABLED=true
+   S3_BUCKET=your-bucket
+   S3_ENDPOINT=http://minio:9000
+   S3_ACCESS_KEY=admin
+   S3_SECRET_KEY=password
+   S3_REGION=us-east-1
+   ```
+2. При включённом S3 все экспорты будут сохраняться и отображаться только в S3.
+3. Автоматическая очистка старых файлов также работает через S3.
+
+### Пример MinIO для docker-compose (для локального тестирования)
+
+```yaml
+# minio:
+#   image: minio/minio:latest
+#   container_name: minio
+#   environment:
+#     - MINIO_ROOT_USER=admin
+#     - MINIO_ROOT_PASSWORD=password
+#   command: server /data --console-address ":9001"
+#   ports:
+#     - "9000:9000" # S3 API
+#     - "9001:9001" # Web консоль
+#   volumes:
+#     - minio-data:/data
+#   networks:
+#     - testops-network
+
+# networks:
+#   testops-network:
+#     driver: bridge
+# volumes:
+#   minio-data:
+```
+
 ## Веб-интерфейс
 
 Веб-интерфейс предоставляет:

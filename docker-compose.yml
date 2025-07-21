@@ -12,6 +12,12 @@ services:
       - EXPORT_PATH=/app/exports
       - WEB_PORT=9090
       - CRON_SCHEDULE=${CRON_SCHEDULE:-0 7 * * *}
+      - S3_ENABLED=${S3_ENABLED:-false}
+      - S3_BUCKET=${S3_BUCKET:-test-export-s3-bucket}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=admin
+      - S3_SECRET_KEY=password
+      - S3_REGION=us-east-1
     ports:
       - "9090:9090"
     volumes:
@@ -27,4 +33,4 @@ services:
 
 networks:
   testops-network:
-    driver: bridge 
+    driver: bridge

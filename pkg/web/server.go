@@ -4,11 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -112,36 +109,15 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filePath := filepath.Join(s.config.ExportPath, filename)
-
-	// Проверяем, что файл существует и находится в разрешенной директории
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		http.Error(w, "Ошибка пути", http.StatusInternalServerError)
-		return
-	}
-
-	absExportPath, err := filepath.Abs(s.config.ExportPath)
-	if err != nil {
-		http.Error(w, "Ошибка пути", http.StatusInternalServerError)
-		return
-	}
-
-	if !strings.HasPrefix(absPath, absExportPath) {
-		http.Error(w, "Доступ запрещен", http.StatusForbidden)
-		return
-	}
-
-	file, err := os.Open(filePath)
+	data, err := s.manager.DownloadExportFile(filename)
 	if err != nil {
 		http.Error(w, "Файл не найден", http.StatusNotFound)
 		return
 	}
-	defer file.Close()
 
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	w.Header().Set("Content-Type", "text/csv")
-	io.Copy(w, file)
+	w.Write(data)
 }
 
 // HTML шаблон для веб-интерфейса

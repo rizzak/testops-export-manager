@@ -12,6 +12,7 @@ import (
 	"testops-export/pkg/api"
 	"testops-export/pkg/config"
 	"testops-export/pkg/models"
+	"testops-export/pkg/storage"
 )
 
 // Manager представляет менеджер экспорта
@@ -113,23 +114,44 @@ func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error
 
 // saveExport сохраняет экспорт в файл
 func (m *Manager) saveExport(data []byte, groupName string) error {
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	filename := fmt.Sprintf("testops_export_%s_%s.csv", groupName, timestamp)
+	filepathOnDisk := filepath.Join(m.config.ExportPath, filename)
+
+	if m.config.S3Enabled {
+		s3storage, err := storage.NewS3Storage(m.config)
+		if err != nil {
+			log.Printf("Ошибка инициализации S3: %v", err)
+			return err
+		}
+		err = s3storage.SaveFile(data, filename)
+		if err != nil {
+			log.Printf("Ошибка сохранения в S3: %v", err)
+			return err
+		}
+		return nil
+	}
+
+	// Если S3 не включён — сохраняем локально
 	if err := os.MkdirAll(m.config.ExportPath, 0755); err != nil {
 		return fmt.Errorf("ошибка создания директории: %v", err)
 	}
-
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := filepath.Join(m.config.ExportPath, fmt.Sprintf("testops_export_%s_%s.csv", groupName, timestamp))
-
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filepathOnDisk, data, 0644); err != nil {
 		return fmt.Errorf("ошибка сохранения файла: %v", err)
 	}
-
-	log.Printf("Экспорт %s сохранен: %s", groupName, filename)
+	log.Printf("Экспорт %s сохранен локально: %s", groupName, filepathOnDisk)
 	return nil
 }
 
 // GetExportFiles возвращает список файлов экспорта
 func (m *Manager) GetExportFiles() ([]models.ExportFile, error) {
+	if m.config.S3Enabled {
+		s3storage, err := storage.NewS3Storage(m.config)
+		if err != nil {
+			return nil, err
+		}
+		return s3storage.ListFiles()
+	}
 	files, err := os.ReadDir(m.config.ExportPath)
 	if err != nil {
 		return nil, err
@@ -166,6 +188,14 @@ func (m *Manager) GetExportFiles() ([]models.ExportFile, error) {
 
 // cleanupOldExports удаляет файлы старше месяца
 func (m *Manager) cleanupOldExports() error {
+	if m.config.S3Enabled {
+		s3storage, err := storage.NewS3Storage(m.config)
+		if err != nil {
+			return fmt.Errorf("ошибка инициализации S3: %v", err)
+		}
+		return s3storage.CleanupOldFiles()
+	}
+	// Локальный режим
 	files, err := os.ReadDir(m.config.ExportPath)
 	if err != nil {
 		return fmt.Errorf("ошибка чтения директории: %v", err)
@@ -208,4 +238,32 @@ func (m *Manager) FormatFileSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// DownloadExportFile возвращает содержимое файла экспорта
+func (m *Manager) DownloadExportFile(filename string) ([]byte, error) {
+	if m.config.S3Enabled {
+		s3storage, err := storage.NewS3Storage(m.config)
+		if err != nil {
+			return nil, err
+		}
+		return s3storage.GetFile(filename)
+	}
+	// Локальный режим
+	filePath := filepath.Join(m.config.ExportPath, filename)
+	return os.ReadFile(filePath)
+}
+
+// DeleteExportFile удаляет файл экспорта
+func (m *Manager) DeleteExportFile(filename string) error {
+	if m.config.S3Enabled {
+		s3storage, err := storage.NewS3Storage(m.config)
+		if err != nil {
+			return err
+		}
+		return s3storage.DeleteFile(filename)
+	}
+	// Локальный режим
+	filePath := filepath.Join(m.config.ExportPath, filename)
+	return os.Remove(filePath)
 }
