@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"testops-export/pkg/config"
+	"testops-export/pkg/export"
 	"testops-export/pkg/models"
 	"testops-export/pkg/web"
 
@@ -189,7 +190,8 @@ func min(a, b int) int {
 // startTestServer запускает тестовый сервер
 func startTestServer(t *testing.T, cfg *config.Config) *http.Server {
 	// Создаем веб-сервер
-	server := web.NewServer(cfg)
+	manager := export.NewManager(cfg)
+	server := web.NewServer(manager)
 
 	// Создаем HTTP сервер для правильного завершения
 	httpServer := &http.Server{
