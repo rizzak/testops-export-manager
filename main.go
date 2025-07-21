@@ -25,7 +25,7 @@ func main() {
 	exportManager := export.NewManager(cfg)
 
 	// Создаем веб-сервер
-	server := web.NewServer(cfg)
+	server := web.NewServer(exportManager)
 
 	// Запускаем веб-сервер в горутине
 	go func() {

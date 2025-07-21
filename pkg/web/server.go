@@ -21,10 +21,10 @@ type Server struct {
 }
 
 // NewServer создает новый веб-сервер
-func NewServer(cfg *config.Config) *Server {
+func NewServer(manager *export.Manager) *Server {
 	return &Server{
-		config:  cfg,
-		manager: export.NewManager(cfg),
+		config:  manager.Config(),
+		manager: manager,
 	}
 }
 
