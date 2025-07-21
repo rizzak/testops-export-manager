@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: testops-export-case
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: testops-export-case
+  template:
+    metadata:
+      labels:
+        app: testops-export-case
+    spec:
+      serviceAccountName: leader-election-sa
+      volumes:
+        - name: exports-volume
+          persistentVolumeClaim:
+            claimName: exports-pvc
+      containers:
+      - name: testops-export-case
+        image: testops-export:latest
+        ports:
+        - containerPort: 9090
+        envFrom:
+        - configMapRef:
+            name: testops-export-case-config
+        volumeMounts:
+          - name: exports-volume
+            mountPath: /app/exports

@@ -1,5 +1,5 @@
 # Используем официальный образ Go для сборки
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Устанавливаем необходимые пакеты для сборки
 RUN apk add --no-cache git ca-certificates tzdata
