@@ -58,16 +58,16 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Собираем список уникальных проектов из экспортов
-	projectMap := make(map[int64]string)
-	for _, f := range files {
-		if f.ProjectID != 0 {
-			projectMap[f.ProjectID] = fmt.Sprintf("Project %d", f.ProjectID)
+	// Собираем список всех проектов из конфига (Projects), чтобы показывать даже те, по которым ещё нет экспортов
+	projectMap := make(map[int64]struct{})
+	for _, p := range s.config.Projects {
+		if p.ProjectID != 0 {
+			projectMap[p.ProjectID] = struct{}{}
 		}
 	}
 	var projects []models.ProjectInfo
-	for id, name := range projectMap {
-		projects = append(projects, models.ProjectInfo{ID: id, Name: name})
+	for id := range projectMap {
+		projects = append(projects, models.ProjectInfo{ID: id, Name: fmt.Sprintf("%d", id)})
 	}
 
 	// Подсчитываем статистику
@@ -289,6 +289,26 @@ const htmlTemplate = `
             margin-bottom: 10px;
             display: block;
         }
+        .project-select-label {
+            font-weight: 500;
+            margin-right: 8px;
+            color: #495057;
+        }
+        .project-select {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #ced4da;
+            font-size: 1em;
+            background: #f8f9fa;
+            color: #495057;
+            transition: border-color 0.2s;
+            outline: none;
+            margin-right: 10px;
+        }
+        .project-select:focus {
+            border-color: #667eea;
+            background: #fff;
+        }
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2em;
@@ -335,8 +355,8 @@ const htmlTemplate = `
 
             <div class="actions">
                 <form id="projectForm" style="display:inline;">
-                    <label for="projectSelect">Проект:</label>
-                    <select id="projectSelect" name="project_id" onchange="document.getElementById('projectForm').submit()">
+                    <label for="projectSelect" class="project-select-label">Проект:</label>
+                    <select id="projectSelect" name="project_id" class="project-select" onchange="document.getElementById('projectForm').submit()">
                         <option value="" {{if eq .SelectedProjectID 0}}selected{{end}}>Все</option>
                         {{range .Projects}}
                         <option value="{{.ID}}" {{if eq $.SelectedProjectID .ID}}selected{{end}}>{{.Name}}</option>
