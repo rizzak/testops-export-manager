@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"sync"
 	"testops-export/pkg/api"
 	"testops-export/pkg/config"
 	"testops-export/pkg/models"
@@ -112,62 +113,109 @@ func (m *Manager) PerformExportForProject(projectID int64) {
 	log.Printf("Экспорт завершен для проекта %d: %d/%d групп успешно", projectID, successCount, totalCount)
 }
 
-// performExportWithRetry выполняет экспорт с повторными попытками
-func (m *Manager) performExportWithRetry(projectID int64, treeID int, group models.ExportGroupConfig) error {
-	for attempt := 1; attempt <= m.config.MaxRetries; attempt++ {
-		log.Printf("Попытка %d/%d экспорта группы %s (ID: %d, ProjectID: %d)...", attempt, m.config.MaxRetries, group.GroupName, group.GroupID, projectID)
-
-		// Запрашиваем экспорт
-		exportResp, err := m.client.RequestExport(projectID, treeID, group.GroupID)
-		if err != nil {
-			log.Printf("Ошибка запроса экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
-
-			if attempt < m.config.MaxRetries {
-				delay := time.Duration(attempt) * m.config.RetryDelay
-				log.Printf("Повторная попытка через %v...", delay)
-				time.Sleep(delay)
-				continue
-			}
-			return fmt.Errorf("экспорт группы %s не удался после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
-		}
-
-		log.Printf("Экспорт для группы %s запрошен, ID: %d", group.GroupName, exportResp.ID)
-
-		// Ждем немного для обработки
-		time.Sleep(5 * time.Second)
-
-		// Скачиваем экспорт
-		data, err := m.client.DownloadExport(exportResp.ID)
-		if err != nil {
-			log.Printf("Ошибка скачивания экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
-
-			if attempt < m.config.MaxRetries {
-				delay := time.Duration(attempt) * m.config.RetryDelay
-				log.Printf("Повторная попытка через %v...", delay)
-				time.Sleep(delay)
-				continue
-			}
-			return fmt.Errorf("скачивание экспорта группы %s не удалось после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
-		}
-
-		// Сохраняем файл
-		if err := m.saveExport(data, group.GroupName, projectID); err != nil {
-			log.Printf("Ошибка сохранения экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
-
-			if attempt < m.config.MaxRetries {
-				delay := time.Duration(attempt) * m.config.RetryDelay
-				log.Printf("Повторная попытка через %v...", delay)
-				time.Sleep(delay)
-				continue
-			}
-			return fmt.Errorf("сохранение экспорта группы %s не удалось после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
-		}
-
-		log.Printf("Экспорт для группы %s завершен успешно (попытка %d/%d)", group.GroupName, attempt, m.config.MaxRetries)
-		return nil
+// PerformExportForProjectParallel выполняет экспорт групп проекта параллельно с ограничением на 5 одновременных задач
+func (m *Manager) PerformExportForProjectParallel(projectID int64) {
+	if err := os.MkdirAll(m.config.ExportPath, 0755); err != nil {
+		log.Fatalf("Ошибка создания директории экспорта: %v", err)
 	}
 
-	return fmt.Errorf("экспорт группы %s не удался после %d попыток", group.GroupName, m.config.MaxRetries)
+	log.Printf("Начинаем параллельный экспорт тесткейсов для проекта %d...", projectID)
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5) // максимум 5 одновременных экспортов
+
+	for _, project := range m.config.Projects {
+		if project.ProjectID != projectID {
+			continue
+		}
+		for _, group := range project.Groups {
+			wg.Add(1)
+			go func(projectID int64, treeID int, group models.ExportGroupConfig) {
+				defer wg.Done()
+				semaphore <- struct{}{}        // занять слот
+				defer func() { <-semaphore }() // освободить слот
+
+				if err := m.performExportWithRetry(projectID, treeID, group); err != nil {
+					log.Printf("❌ Группа %s: %v", group.GroupName, err)
+				}
+			}(project.ProjectID, project.TreeID, group)
+		}
+	}
+	wg.Wait()
+	log.Printf("Параллельный экспорт завершен для проекта %d", projectID)
+}
+
+// PerformExportParallel выполняет экспорт всех групп всех проектов параллельно с ограничением на 5 одновременных задач
+func (m *Manager) PerformExportParallel() {
+	if err := os.MkdirAll(m.config.ExportPath, 0755); err != nil {
+		log.Fatalf("Ошибка создания директории экспорта: %v", err)
+	}
+
+	log.Println("Начинаем параллельный экспорт тесткейсов для всех проектов...")
+
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 5) // максимум 5 одновременных экспортов
+
+	for _, project := range m.config.Projects {
+		for _, group := range project.Groups {
+			wg.Add(1)
+			go func(projectID int64, treeID int, group models.ExportGroupConfig) {
+				defer wg.Done()
+				semaphore <- struct{}{}        // занять слот
+				defer func() { <-semaphore }() // освободить слот
+
+				if err := m.performExportWithRetry(projectID, treeID, group); err != nil {
+					log.Printf("❌ Проект %d, группа %s: %v", projectID, group.GroupName, err)
+				}
+			}(project.ProjectID, project.TreeID, group)
+		}
+	}
+	wg.Wait()
+	log.Println("Параллельный экспорт завершен для всех проектов")
+}
+
+// performExportWithRetry выполняет экспорт с повторными попытками
+func (m *Manager) performExportWithRetry(projectID int64, treeID int, group models.ExportGroupConfig) error {
+	log.Printf("[START] Проект %d, группа %s", projectID, group.GroupName)
+	var lastErr error
+	for attempt := 1; attempt <= m.config.MaxRetries; attempt++ {
+		exportResp, err := m.client.RequestExport(projectID, treeID, group.GroupID)
+		if err != nil {
+			lastErr = err
+			log.Printf("[RETRY] Проект %d, группа %s, попытка %d/%d: %v", projectID, group.GroupName, attempt, m.config.MaxRetries, err)
+			time.Sleep(time.Duration(attempt) * m.config.RetryDelay)
+			continue
+		}
+
+		time.Sleep(5 * time.Second)
+
+		data, err := m.client.DownloadExport(exportResp.ID)
+		if err != nil {
+			lastErr = err
+			log.Printf("[RETRY] Проект %d, группа %s, попытка %d/%d: %v", projectID, group.GroupName, attempt, m.config.MaxRetries, err)
+			time.Sleep(time.Duration(attempt) * m.config.RetryDelay)
+			continue
+		}
+
+		if err := m.saveExport(data, group.GroupName, projectID); err != nil {
+			lastErr = err
+			log.Printf("[RETRY] Проект %d, группа %s, попытка %d/%d: %v", projectID, group.GroupName, attempt, m.config.MaxRetries, err)
+			time.Sleep(time.Duration(attempt) * m.config.RetryDelay)
+			continue
+		}
+
+		filename := m.makeExportFilename(group.GroupName, projectID)
+		log.Printf("[OK]    Проект %d, группа %s, файл: %s", projectID, group.GroupName, filename)
+		return nil
+	}
+	log.Printf("[FAIL]  Проект %d, группа %s, попытка %d/%d: %v", projectID, group.GroupName, m.config.MaxRetries, m.config.MaxRetries, lastErr)
+	return lastErr
+}
+
+// makeExportFilename возвращает имя файла экспорта для логов
+func (m *Manager) makeExportFilename(groupName string, projectID int64) string {
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+	return fmt.Sprintf("testops_export_%d_%s_%s.csv", projectID, groupName, timestamp)
 }
 
 // saveExport сохраняет экспорт в файл
@@ -192,7 +240,6 @@ func (m *Manager) saveExport(data []byte, groupName string, projectID int64) err
 	if err := os.WriteFile(filepathOnDisk, data, 0644); err != nil {
 		return fmt.Errorf("ошибка сохранения файла: %v", err)
 	}
-	log.Printf("Экспорт %s сохранен локально: %s", groupName, filepathOnDisk)
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -18,6 +19,7 @@ import (
 type Server struct {
 	config  *config.Config
 	manager *export.Manager
+	httpSrv *http.Server
 }
 
 // NewServer создает новый веб-сервер
@@ -30,14 +32,28 @@ func NewServer(manager *export.Manager) *Server {
 
 // Start запускает веб-сервер
 func (s *Server) Start() error {
-	http.HandleFunc("/", s.handleIndex)
-	http.HandleFunc("/export", s.handleExport)
-	http.HandleFunc("/download/", s.handleDownload)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/export", s.handleExport)
+	mux.HandleFunc("/download/", s.handleDownload)
+
+	s.httpSrv = &http.Server{
+		Addr:    ":" + s.config.WebPort,
+		Handler: mux,
+	}
 
 	log.Printf("Веб-сервер запущен на порту %s", s.config.WebPort)
 	log.Printf("Откройте http://localhost:%s в браузере", s.config.WebPort)
 
-	return http.ListenAndServe(":"+s.config.WebPort, nil)
+	return s.httpSrv.ListenAndServe()
+}
+
+// Shutdown останавливает веб-сервер корректно
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpSrv != nil {
+		return s.httpSrv.Shutdown(ctx)
+	}
+	return nil
 }
 
 // handleIndex обрабатывает главную страницу
@@ -127,11 +143,10 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.ProjectID == 0 {
-		http.Error(w, "Не выбран проект", http.StatusBadRequest)
-		return
+		go s.manager.PerformExportParallel()
+	} else {
+		go s.manager.PerformExportForProjectParallel(body.ProjectID)
 	}
-
-	go s.manager.PerformExportForProject(body.ProjectID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

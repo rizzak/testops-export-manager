@@ -70,6 +70,11 @@ func main() {
 			log.Println("🛑 Получен сигнал завершения. Останавливаем сервис...")
 		}
 		ctxStop := c.Stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Ошибка при завершении веб-сервера: %v", err)
+		}
 		<-ctxStop.Done()
 		log.Println("✅ Сервис остановлен")
 	})
