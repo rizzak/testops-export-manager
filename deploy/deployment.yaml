@@ -17,9 +17,13 @@ spec:
         - name: exports-volume
           persistentVolumeClaim:
             claimName: exports-pvc
+        - name: projects-config
+          configMap:
+            name: projects-config
       containers:
       - name: testops-export-case
-        image: testops-export:latest
+        image: testops-export:1.0.1
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9090
         envFrom:
@@ -28,3 +32,6 @@ spec:
         volumeMounts:
           - name: exports-volume
             mountPath: /app/exports
+          - name: projects-config
+            mountPath: /app/projects.json
+            subPath: projects.json

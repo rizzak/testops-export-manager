@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: projects-config
+  namespace: default
+data:
+  projects.json: |
+    {
+      "projects": [
+        {
+          "project_id": 17,
+          "tree_id": 937,
+          "groups": [
+            { "group_id": 26961091, "group_name": "API" },
+            { "group_id": 24545654, "group_name": "UI" },
+            { "group_id": 30308896, "group_name": "UI-AT" }
+          ]
+        },
+        {
+          "project_id": 15,
+          "tree_id": 868,
+          "groups": [
+            { "group_id": 21360405, "group_name": "Seller-Analitics" }
+          ]
+        }
+      ]
+    }
