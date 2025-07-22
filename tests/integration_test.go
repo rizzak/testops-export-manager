@@ -37,9 +37,21 @@ func TestIntegrationExport(t *testing.T) {
 		MaxRetries:   3,
 		RetryDelay:   5 * time.Second,
 		CronSchedule: "0 7 * * *",
-		Exports: []models.ExportConfig{
-			{GroupID: 26961091, GroupName: "API"},
-			{GroupID: 24545654, GroupName: "UI"},
+		Projects: []models.ProjectConfig{
+			{
+				ProjectID: 17,
+				TreeID:    937,
+				Groups: []models.ExportGroupConfig{
+					{GroupID: 26961091, GroupName: "API"},
+				},
+			},
+			{
+				ProjectID: 15,
+				TreeID:    868,
+				Groups: []models.ExportGroupConfig{
+					{GroupID: 21360405, GroupName: "Seller-Analitics"},
+				},
+			},
 		},
 	}
 
@@ -96,7 +108,10 @@ func TestIntegrationExport(t *testing.T) {
 
 	// 6. Проверяем, что в директории появились экспорты
 	filesAfter := countFilesInDir(t, exportPath)
-	expectedFiles := len(cfg.Exports) // Количество групп в конфигурации
+	expectedFiles := 0
+	for _, project := range cfg.Projects {
+		expectedFiles += len(project.Groups)
+	}
 	if filesAfter != expectedFiles {
 		t.Errorf("Ожидалось %d файлов (по количеству групп), найдено: %d", expectedFiles, filesAfter)
 	}
