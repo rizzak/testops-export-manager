@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,10 @@ type Manager struct {
 
 // NewManager создает новый менеджер экспорта
 func NewManager(cfg *config.Config) *Manager {
+	// Создаём директорию экспорта, если её нет
+	if err := os.MkdirAll(cfg.ExportPath, 0755); err != nil {
+		log.Fatalf("Ошибка создания директории экспорта: %v", err)
+	}
 	var s3storage *storage.S3Storage
 	if cfg.S3Enabled {
 		s3, err := storage.NewS3Storage(cfg)
@@ -42,16 +47,24 @@ func NewManager(cfg *config.Config) *Manager {
 
 // PerformExport выполняет экспорт всех групп с повторными попытками
 func (m *Manager) PerformExport() {
+	// Создаём директорию экспорта, если её нет
+	if err := os.MkdirAll(m.config.ExportPath, 0755); err != nil {
+		log.Fatalf("Ошибка создания директории экспорта: %v", err)
+	}
+
 	log.Println("Начинаем экспорт тесткейсов...")
 
 	successCount := 0
-	totalCount := len(m.config.Exports)
+	totalCount := 0
 
-	for _, exportConfig := range m.config.Exports {
-		if err := m.performExportWithRetry(exportConfig); err != nil {
-			log.Printf("❌ %v", err)
-		} else {
-			successCount++
+	for _, project := range m.config.Projects {
+		for _, group := range project.Groups {
+			totalCount++
+			if err := m.performExportWithRetry(project.ProjectID, project.TreeID, group); err != nil {
+				log.Printf("❌ %v", err)
+			} else {
+				successCount++
+			}
 		}
 	}
 
@@ -66,14 +79,14 @@ func (m *Manager) PerformExport() {
 }
 
 // performExportWithRetry выполняет экспорт с повторными попытками
-func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error {
+func (m *Manager) performExportWithRetry(projectID int64, treeID int, group models.ExportGroupConfig) error {
 	for attempt := 1; attempt <= m.config.MaxRetries; attempt++ {
-		log.Printf("Попытка %d/%d экспорта группы %s (ID: %d)...", attempt, m.config.MaxRetries, exportConfig.GroupName, exportConfig.GroupID)
+		log.Printf("Попытка %d/%d экспорта группы %s (ID: %d, ProjectID: %d)...", attempt, m.config.MaxRetries, group.GroupName, group.GroupID, projectID)
 
 		// Запрашиваем экспорт
-		exportResp, err := m.client.RequestExport(exportConfig.GroupID)
+		exportResp, err := m.client.RequestExport(projectID, treeID, group.GroupID)
 		if err != nil {
-			log.Printf("Ошибка запроса экспорта для группы %s (попытка %d/%d): %v", exportConfig.GroupName, attempt, m.config.MaxRetries, err)
+			log.Printf("Ошибка запроса экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
 
 			if attempt < m.config.MaxRetries {
 				delay := time.Duration(attempt) * m.config.RetryDelay
@@ -81,10 +94,10 @@ func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error
 				time.Sleep(delay)
 				continue
 			}
-			return fmt.Errorf("экспорт группы %s не удался после %d попыток: %v", exportConfig.GroupName, m.config.MaxRetries, err)
+			return fmt.Errorf("экспорт группы %s не удался после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
 		}
 
-		log.Printf("Экспорт для группы %s запрошен, ID: %d", exportConfig.GroupName, exportResp.ID)
+		log.Printf("Экспорт для группы %s запрошен, ID: %d", group.GroupName, exportResp.ID)
 
 		// Ждем немного для обработки
 		time.Sleep(5 * time.Second)
@@ -92,7 +105,7 @@ func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error
 		// Скачиваем экспорт
 		data, err := m.client.DownloadExport(exportResp.ID)
 		if err != nil {
-			log.Printf("Ошибка скачивания экспорта для группы %s (попытка %d/%d): %v", exportConfig.GroupName, attempt, m.config.MaxRetries, err)
+			log.Printf("Ошибка скачивания экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
 
 			if attempt < m.config.MaxRetries {
 				delay := time.Duration(attempt) * m.config.RetryDelay
@@ -100,12 +113,12 @@ func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error
 				time.Sleep(delay)
 				continue
 			}
-			return fmt.Errorf("скачивание экспорта группы %s не удалось после %d попыток: %v", exportConfig.GroupName, m.config.MaxRetries, err)
+			return fmt.Errorf("скачивание экспорта группы %s не удалось после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
 		}
 
 		// Сохраняем файл
-		if err := m.saveExport(data, exportConfig.GroupName); err != nil {
-			log.Printf("Ошибка сохранения экспорта для группы %s (попытка %d/%d): %v", exportConfig.GroupName, attempt, m.config.MaxRetries, err)
+		if err := m.saveExport(data, group.GroupName, projectID); err != nil {
+			log.Printf("Ошибка сохранения экспорта для группы %s (попытка %d/%d): %v", group.GroupName, attempt, m.config.MaxRetries, err)
 
 			if attempt < m.config.MaxRetries {
 				delay := time.Duration(attempt) * m.config.RetryDelay
@@ -113,20 +126,20 @@ func (m *Manager) performExportWithRetry(exportConfig models.ExportConfig) error
 				time.Sleep(delay)
 				continue
 			}
-			return fmt.Errorf("сохранение экспорта группы %s не удалось после %d попыток: %v", exportConfig.GroupName, m.config.MaxRetries, err)
+			return fmt.Errorf("сохранение экспорта группы %s не удалось после %d попыток: %v", group.GroupName, m.config.MaxRetries, err)
 		}
 
-		log.Printf("Экспорт для группы %s завершен успешно (попытка %d/%d)", exportConfig.GroupName, attempt, m.config.MaxRetries)
+		log.Printf("Экспорт для группы %s завершен успешно (попытка %d/%d)", group.GroupName, attempt, m.config.MaxRetries)
 		return nil
 	}
 
-	return fmt.Errorf("экспорт группы %s не удался после %d попыток", exportConfig.GroupName, m.config.MaxRetries)
+	return fmt.Errorf("экспорт группы %s не удался после %d попыток", group.GroupName, m.config.MaxRetries)
 }
 
 // saveExport сохраняет экспорт в файл
-func (m *Manager) saveExport(data []byte, groupName string) error {
+func (m *Manager) saveExport(data []byte, groupName string, projectID int64) error {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	filename := fmt.Sprintf("testops_export_%s_%s.csv", groupName, timestamp)
+	filename := fmt.Sprintf("testops_export_%d_%s_%s.csv", projectID, groupName, timestamp)
 	filepathOnDisk := filepath.Join(m.config.ExportPath, filename)
 
 	if m.config.S3Enabled && m.s3storage != nil {
@@ -150,7 +163,7 @@ func (m *Manager) saveExport(data []byte, groupName string) error {
 }
 
 // GetExportFiles возвращает список файлов экспорта
-func (m *Manager) GetExportFiles() ([]models.ExportFile, error) {
+func (m *Manager) GetExportFiles(projectIDFilter ...int64) ([]models.ExportFile, error) {
 	if m.config.S3Enabled && m.s3storage != nil {
 		return m.s3storage.ListFiles()
 	}
@@ -170,14 +183,34 @@ func (m *Manager) GetExportFiles() ([]models.ExportFile, error) {
 			continue
 		}
 
+		// Парсим ProjectID из имени файла
+		var projectID int64 = 0
+		parts := strings.Split(file.Name(), "_")
+		if len(parts) > 2 {
+			projectID, _ = strconv.ParseInt(parts[2], 10, 64)
+		}
+
 		exportFile := models.ExportFile{
 			Name:          file.Name(),
 			Size:          info.Size(),
 			ModifiedTime:  info.ModTime(),
 			FormattedSize: m.FormatFileSize(info.Size()),
 			FormattedDate: info.ModTime().Format("02.01.2006 15:04:05"),
+			ProjectID:     projectID,
 		}
 		exportFiles = append(exportFiles, exportFile)
+	}
+
+	// Фильтрация по projectID, если передан
+	if len(projectIDFilter) > 0 {
+		pid := projectIDFilter[0]
+		var filtered []models.ExportFile
+		for _, f := range exportFiles {
+			if f.ProjectID == pid {
+				filtered = append(filtered, f)
+			}
+		}
+		exportFiles = filtered
 	}
 
 	// Сортируем по дате изменения (новые сверху)

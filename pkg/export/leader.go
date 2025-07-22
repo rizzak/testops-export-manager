@@ -16,7 +16,11 @@ import (
 func RunWithLeaderElection(onLeader func(ctx context.Context)) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		log.Fatalf("Ошибка подключения к кластеру: %v", err)
+		log.Printf("⚠️ Не в Kubernetes: leader election отключён (%v)", err)
+		ctx := context.Background()
+		go onLeader(ctx)
+		select {} // блокируем main, чтобы не выйти
+		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {

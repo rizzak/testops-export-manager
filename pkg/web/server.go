@@ -42,10 +42,32 @@ func (s *Server) Start() error {
 
 // handleIndex обрабатывает главную страницу
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	files, err := s.manager.GetExportFiles()
+	// Получаем project_id из query
+	var files []models.ExportFile
+	var err error
+	projectIDStr := r.URL.Query().Get("project_id")
+	var selectedProjectID int64
+	if projectIDStr != "" {
+		fmt.Sscanf(projectIDStr, "%d", &selectedProjectID)
+		files, err = s.manager.GetExportFiles(selectedProjectID)
+	} else {
+		files, err = s.manager.GetExportFiles()
+	}
 	if err != nil {
 		http.Error(w, "Ошибка чтения файлов", http.StatusInternalServerError)
 		return
+	}
+
+	// Собираем список уникальных проектов из экспортов
+	projectMap := make(map[int64]string)
+	for _, f := range files {
+		if f.ProjectID != 0 {
+			projectMap[f.ProjectID] = fmt.Sprintf("Project %d", f.ProjectID)
+		}
+	}
+	var projects []models.ProjectInfo
+	for id, name := range projectMap {
+		projects = append(projects, models.ProjectInfo{ID: id, Name: name})
 	}
 
 	// Подсчитываем статистику
@@ -65,10 +87,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := models.PageData{
-		Files:      files,
-		TotalFiles: fmt.Sprintf("%d", len(files)),
-		TotalSize:  s.manager.FormatFileSize(totalSize),
-		LastExport: lastExport,
+		Files:             files,
+		TotalFiles:        fmt.Sprintf("%d", len(files)),
+		TotalSize:         s.manager.FormatFileSize(totalSize),
+		LastExport:        lastExport,
+		Projects:          projects,
+		SelectedProjectID: selectedProjectID,
 	}
 
 	tmpl, err := template.New("index").Parse(htmlTemplate)
@@ -310,6 +334,15 @@ const htmlTemplate = `
             </div>
 
             <div class="actions">
+                <form id="projectForm" style="display:inline;">
+                    <label for="projectSelect">Проект:</label>
+                    <select id="projectSelect" name="project_id" onchange="document.getElementById('projectForm').submit()">
+                        <option value="" {{if eq .SelectedProjectID 0}}selected{{end}}>Все</option>
+                        {{range .Projects}}
+                        <option value="{{.ID}}" {{if eq $.SelectedProjectID .ID}}selected{{end}}>{{.Name}}</option>
+                        {{end}}
+                    </select>
+                </form>
                 <button id="exportBtn" class="btn">Запустить экспорт сейчас</button>
                 <a href="/" class="btn btn-secondary">Обновить</a>
             </div>

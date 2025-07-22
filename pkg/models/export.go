@@ -36,6 +36,7 @@ type ExportResponse struct {
 type ExportConfig struct {
 	GroupID   int
 	GroupName string
+	ProjectID int64 // ID проекта TestOps
 }
 
 // ExportFile представляет файл экспорта
@@ -45,12 +46,34 @@ type ExportFile struct {
 	ModifiedTime  time.Time
 	FormattedSize string
 	FormattedDate string
+	ProjectID     int64 // ID проекта TestOps
+}
+
+// ExportGroupConfig описывает группу для экспорта в рамках проекта
+type ExportGroupConfig struct {
+	GroupID   int    `json:"group_id"`
+	GroupName string `json:"group_name"`
+}
+
+// ProjectConfig описывает проект TestOps и его группы
+type ProjectConfig struct {
+	ProjectID int64               `json:"project_id"`
+	TreeID    int                 `json:"tree_id"`
+	Groups    []ExportGroupConfig `json:"groups"`
+}
+
+// ProjectInfo содержит информацию о проекте для UI
+type ProjectInfo struct {
+	ID   int64
+	Name string
 }
 
 // PageData представляет данные для веб-страницы
 type PageData struct {
-	Files      []ExportFile
-	TotalFiles string
-	TotalSize  string
-	LastExport string
+	Files             []ExportFile
+	TotalFiles        string
+	TotalSize         string
+	LastExport        string
+	Projects          []ProjectInfo
+	SelectedProjectID int64
 }

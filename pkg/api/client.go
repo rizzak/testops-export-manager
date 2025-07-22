@@ -82,8 +82,8 @@ func (c *Client) getAccessToken() (string, error) {
 }
 
 // RequestExport запрашивает экспорт тесткейсов
-func (c *Client) RequestExport(groupID int) (*models.ExportResponse, error) {
-	exportReq := createExportRequest(groupID)
+func (c *Client) RequestExport(projectID int64, treeID int, groupID int) (*models.ExportResponse, error) {
+	exportReq := createExportRequest(projectID, treeID, groupID)
 
 	jsonData, err := json.Marshal(exportReq)
 	if err != nil {
@@ -154,8 +154,8 @@ func (c *Client) DownloadExport(exportID int) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// createExportRequest создает запрос на экспорт для указанной группы
-func createExportRequest(groupID int) *models.ExportRequest {
+// createExportRequest создает запрос на экспорт для указанной группы и проекта
+func createExportRequest(projectID int64, treeID int, groupID int) *models.ExportRequest {
 	return &models.ExportRequest{
 		Selection: struct {
 			ProjectID        int   `json:"projectId"`
@@ -167,8 +167,8 @@ func createExportRequest(groupID int) *models.ExportRequest {
 			Inverted         bool  `json:"inverted"`
 			Deleted          bool  `json:"deleted"`
 		}{
-			ProjectID:        17,
-			TreeID:           937,
+			ProjectID:        int(projectID),
+			TreeID:           treeID,
 			GroupsExclude:    []int{},
 			GroupsInclude:    []int{groupID},
 			TestCasesExclude: []int{},

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -16,7 +17,7 @@ type Config struct {
 	Token        string // Используется для получения access_token
 	ExportPath   string
 	WebPort      string
-	Exports      []models.ExportConfig
+	Projects     []models.ProjectConfig
 	MaxRetries   int
 	RetryDelay   time.Duration
 	CronSchedule string // Добавляем настройку расписания
@@ -30,6 +31,10 @@ type Config struct {
 	S3Region    string
 }
 
+type ProjectsFile struct {
+	Projects []models.ProjectConfig `json:"projects"`
+}
+
 // Load загружает конфигурацию из переменных окружения
 func Load() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
@@ -37,6 +42,16 @@ func Load() (*Config, error) {
 		fmt.Println("   Переменные будут загружены из системного окружения")
 	} else {
 		fmt.Println("✅ Файл .env загружен успешно")
+	}
+
+	projectsPath := getEnv("PROJECTS_CONFIG", "projects.json")
+	var projectsFile ProjectsFile
+	data, err := os.ReadFile(projectsPath)
+	if err != nil {
+		return nil, fmt.Errorf("Ошибка чтения файла проектов: %v", err)
+	}
+	if err := json.Unmarshal(data, &projectsFile); err != nil {
+		return nil, fmt.Errorf("Ошибка парсинга JSON проектов: %v", err)
 	}
 
 	config := &Config{
@@ -47,11 +62,7 @@ func Load() (*Config, error) {
 		MaxRetries:   10,
 		RetryDelay:   15 * time.Minute,
 		CronSchedule: getEnv("CRON_SCHEDULE", "0 7 * * *"), // По умолчанию 7:00 UTC
-		Exports: []models.ExportConfig{
-			{GroupID: 26961091, GroupName: "API"},
-			{GroupID: 24545654, GroupName: "UI"},
-			{GroupID: 30308896, GroupName: "UI-AT"},
-		},
+		Projects:     projectsFile.Projects,
 		// S3 конфигурация
 		S3Enabled:   getEnvBool("S3_ENABLED", false),
 		S3Bucket:    getEnv("S3_BUCKET", ""),
