@@ -78,6 +78,40 @@ func (m *Manager) PerformExport() {
 	log.Printf("Экспорт завершен: %d/%d групп успешно", successCount, totalCount)
 }
 
+// PerformExportForProject выполняет экспорт только для выбранного проекта
+func (m *Manager) PerformExportForProject(projectID int64) {
+	if err := os.MkdirAll(m.config.ExportPath, 0755); err != nil {
+		log.Fatalf("Ошибка создания директории экспорта: %v", err)
+	}
+
+	log.Printf("Начинаем экспорт тесткейсов для проекта %d...", projectID)
+
+	successCount := 0
+	totalCount := 0
+
+	for _, project := range m.config.Projects {
+		if project.ProjectID != projectID {
+			continue
+		}
+		for _, group := range project.Groups {
+			totalCount++
+			if err := m.performExportWithRetry(project.ProjectID, project.TreeID, group); err != nil {
+				log.Printf("❌ %v", err)
+			} else {
+				successCount++
+			}
+		}
+	}
+
+	if successCount > 0 {
+		if err := m.cleanupOldExports(); err != nil {
+			log.Printf("Ошибка очистки старых файлов: %v", err)
+		}
+	}
+
+	log.Printf("Экспорт завершен для проекта %d: %d/%d групп успешно", projectID, successCount, totalCount)
+}
+
 // performExportWithRetry выполняет экспорт с повторными попытками
 func (m *Manager) performExportWithRetry(projectID int64, treeID int, group models.ExportGroupConfig) error {
 	for attempt := 1; attempt <= m.config.MaxRetries; attempt++ {

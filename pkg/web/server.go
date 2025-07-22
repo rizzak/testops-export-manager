@@ -95,7 +95,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		SelectedProjectID: selectedProjectID,
 	}
 
-	tmpl, err := template.New("index").Parse(htmlTemplate)
+	tmpl, err := template.New("index").Funcs(template.FuncMap{
+		"toJson": func(v interface{}) template.JS {
+			b, _ := json.Marshal(v)
+			return template.JS(b)
+		},
+	}).Parse(htmlTemplate)
 	if err != nil {
 		http.Error(w, "Ошибка шаблона", http.StatusInternalServerError)
 		return
@@ -112,7 +117,21 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go s.manager.PerformExport()
+	type req struct {
+		ProjectID int64 `json:"project_id"`
+	}
+	var body req
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Неверный формат запроса", http.StatusBadRequest)
+		return
+	}
+
+	if body.ProjectID == 0 {
+		http.Error(w, "Не выбран проект", http.StatusBadRequest)
+		return
+	}
+
+	go s.manager.PerformExportForProject(body.ProjectID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -234,6 +253,12 @@ const htmlTemplate = `
         }
         .btn-secondary:hover {
             background: #5a6268;
+        }
+        .btn:disabled {
+            background: #c0c4cc;
+            color: #f8f9fa;
+            cursor: not-allowed;
+            opacity: 0.7;
         }
         .exports-table {
             width: 100%;
@@ -363,8 +388,8 @@ const htmlTemplate = `
                         {{end}}
                     </select>
                 </form>
-                <button id="exportBtn" class="btn">Запустить экспорт сейчас</button>
-                <a href="/" class="btn btn-secondary">Обновить</a>
+                <button id="exportBtn" class="btn" {{if eq .SelectedProjectID 0}}disabled{{end}}>Запустить экспорт сейчас</button>
+                <button type="button" class="btn btn-secondary" onclick="location.reload();">Обновить</button>
             </div>
 
             <div id="exportStatus" style="text-align:center; margin-bottom:20px; color:#28a745; display:none;"></div>
@@ -385,19 +410,11 @@ const htmlTemplate = `
                         <th>Действия</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {{range .Files}}
-                    <tr>
-                        <td>{{.Name}}</td>
-                        <td>{{.FormattedSize}}</td>
-                        <td>{{.FormattedDate}}</td>
-                        <td>
-                            <a href="/download/{{.Name}}" class="download-link">Скачать</a>
-                        </td>
-                    </tr>
-                    {{end}}
+                <tbody id="exportsTbody">
+                    <!-- JS будет рендерить сюда -->
                 </tbody>
             </table>
+            <button id="showMoreBtn" class="btn" style="display:none;">Показать ещё</button>
             {{else}}
             <div class="empty-state">
                 <h3>Экспорты не найдены</h3>
@@ -409,9 +426,15 @@ const htmlTemplate = `
     <script>
     document.getElementById('exportBtn').onclick = function() {
         var btn = this;
+        if (btn.disabled) return;
         btn.disabled = true;
         btn.textContent = 'Экспортируется...';
-        fetch('/export', {method: 'POST'})
+        var projectId = Number(document.getElementById('projectSelect').value);
+        fetch('/export', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ project_id: projectId })
+        })
             .then(r => r.json())
             .then(data => {
                 document.getElementById('exportStatus').style.display = 'block';
@@ -427,6 +450,34 @@ const htmlTemplate = `
                 btn.disabled = false;
             });
     };
+
+const allFiles = {{ toJson .Files }};
+let shown = 10;
+
+function renderFiles() {
+    const tbody = document.getElementById('exportsTbody');
+    tbody.innerHTML = '';
+    for (let i = 0; i < Math.min(shown, allFiles.length); i++) {
+        const f = allFiles[i];
+        tbody.innerHTML += '<tr>' +
+            '<td>' + f.Name + '</td>' +
+            '<td>' + f.FormattedSize + '</td>' +
+            '<td>' + f.FormattedDate + '</td>' +
+            '<td><a href="/download/' + f.Name + '" class="download-link">Скачать</a></td>' +
+        '</tr>';
+    }
+    document.getElementById('showMoreBtn').style.display = shown < allFiles.length ? '' : 'none';
+}
+
+document.getElementById('showMoreBtn').onclick = function() {
+    shown += 10;
+    renderFiles();
+};
+
+window.onload = function() {
+    renderFiles();
+    if (allFiles.length > 10) document.getElementById('showMoreBtn').style.display = '';
+};
     </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 # Файлы экспорта
 exports/
+test_exports
 
 # Бинарные файлы
 testops-export
