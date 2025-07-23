@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -159,12 +160,20 @@ func (s *S3Storage) ListFiles() ([]models.ExportFile, error) {
 			// Извлекаем имя файла из ключа
 			filename := filepath.Base(*obj.Key)
 
+			// Парсим ProjectID из имени файла
+			var projectID int64 = 0
+			parts := strings.Split(filename, "_")
+			if len(parts) > 2 {
+				projectID, _ = strconv.ParseInt(parts[2], 10, 64)
+			}
+
 			exportFile := models.ExportFile{
 				Name:          filename,
 				Size:          *obj.Size,
 				ModifiedTime:  *obj.LastModified,
 				FormattedSize: s.formatFileSize(*obj.Size),
 				FormattedDate: obj.LastModified.Format("02.01.2006 15:04:05"),
+				ProjectID:     projectID,
 			}
 			files = append(files, exportFile)
 		}

@@ -22,7 +22,7 @@ spec:
             name: projects-config
       containers:
       - name: testops-export-case
-        image: testops-export:1.0.1
+        image: testops-export:1.0.3
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 9090

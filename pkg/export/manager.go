@@ -245,44 +245,55 @@ func (m *Manager) saveExport(data []byte, groupName string, projectID int64) err
 
 // GetExportFiles возвращает список файлов экспорта
 func (m *Manager) GetExportFiles(projectIDFilter ...int64) ([]models.ExportFile, error) {
-	if m.config.S3Enabled && m.s3storage != nil {
-		return m.s3storage.ListFiles()
-	}
-	files, err := os.ReadDir(m.config.ExportPath)
-	if err != nil {
-		return nil, err
-	}
-
 	var exportFiles []models.ExportFile
-	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(file.Name(), ".csv") {
-			continue
-		}
+	var err error
 
-		info, err := file.Info()
+	if m.config.S3Enabled && m.s3storage != nil {
+		exportFiles, err = m.s3storage.ListFiles()
 		if err != nil {
-			continue
+			return nil, err
+		}
+	} else {
+		files, err := os.ReadDir(m.config.ExportPath)
+		if err != nil {
+			return nil, err
 		}
 
-		// Парсим ProjectID из имени файла
-		var projectID int64 = 0
-		parts := strings.Split(file.Name(), "_")
-		if len(parts) > 2 {
-			projectID, _ = strconv.ParseInt(parts[2], 10, 64)
-		}
+		for _, file := range files {
+			if file.IsDir() || !strings.HasSuffix(file.Name(), ".csv") {
+				continue
+			}
 
-		exportFile := models.ExportFile{
-			Name:          file.Name(),
-			Size:          info.Size(),
-			ModifiedTime:  info.ModTime(),
-			FormattedSize: m.FormatFileSize(info.Size()),
-			FormattedDate: info.ModTime().Format("02.01.2006 15:04:05"),
-			ProjectID:     projectID,
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+
+			// Парсим ProjectID из имени файла
+			var projectID int64 = 0
+			parts := strings.Split(file.Name(), "_")
+			if len(parts) > 2 {
+				projectID, err = strconv.ParseInt(parts[2], 10, 64)
+				if err != nil {
+					continue // если не удалось распарсить projectID, пропускаем файл
+				}
+			} else {
+				continue // если формат имени файла не подходит, пропускаем файл
+			}
+
+			exportFile := models.ExportFile{
+				Name:          file.Name(),
+				Size:          info.Size(),
+				ModifiedTime:  info.ModTime(),
+				FormattedSize: m.FormatFileSize(info.Size()),
+				FormattedDate: info.ModTime().Format("02.01.2006 15:04:05"),
+				ProjectID:     projectID,
+			}
+			exportFiles = append(exportFiles, exportFile)
 		}
-		exportFiles = append(exportFiles, exportFile)
 	}
 
-	// Фильтрация по projectID, если передан
+	// Фильтрация по projectID, если передан (работает и для S3, и для локальных файлов)
 	if len(projectIDFilter) > 0 {
 		pid := projectIDFilter[0]
 		var filtered []models.ExportFile
