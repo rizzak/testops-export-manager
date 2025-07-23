@@ -76,4 +76,6 @@ type PageData struct {
 	LastExport        string
 	Projects          []ProjectInfo
 	SelectedProjectID int64
+	CronSchedule      string // Расписание cron из конфига
+	MaxRetries        int    // Количество повторных попыток из конфига
 }

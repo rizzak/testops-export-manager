@@ -109,12 +109,17 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		LastExport:        lastExport,
 		Projects:          projects,
 		SelectedProjectID: selectedProjectID,
+		CronSchedule:      s.config.CronSchedule,
+		MaxRetries:        s.config.MaxRetries,
 	}
 
 	tmpl, err := template.New("index").Funcs(template.FuncMap{
 		"toJson": func(v interface{}) template.JS {
 			b, _ := json.Marshal(v)
 			return template.JS(b)
+		},
+		"formatCronSchedule": func(cronExpr string) string {
+			return formatCronSchedule(cronExpr)
 		},
 	}).Parse(htmlTemplate)
 	if err != nil {
@@ -176,6 +181,23 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	w.Header().Set("Content-Type", "text/csv")
 	w.Write(data)
+}
+
+// formatCronSchedule преобразует cron выражение в понятное описание
+func formatCronSchedule(cronExpr string) string {
+	parts := strings.Fields(cronExpr)
+	if len(parts) >= 2 {
+		minute := parts[0]
+		hour := parts[1]
+
+		// Преобразуем в MSK (UTC+3)
+		hourUTC := 0
+		if h, err := fmt.Sscanf(hour, "%d", &hourUTC); err == nil && h == 1 {
+			hourMSK := (hourUTC + 3) % 24
+			return fmt.Sprintf("в %02s:%s UTC (%02d:%s MSK)", hour, minute, hourMSK, minute)
+		}
+	}
+	return fmt.Sprintf("по расписанию: %s UTC", cronExpr)
 }
 
 // HTML шаблон для веб-интерфейса
@@ -410,9 +432,9 @@ const htmlTemplate = `
             <div id="exportStatus" style="text-align:center; margin-bottom:20px; color:#28a745; display:none;"></div>
 
             <div style="text-align:center; margin-bottom:20px; color:#6c757d; font-size:0.9em;">
-                <p>⏰ Автоматический экспорт выполняется в 10:00 UTC (13:00 MSK) по будням</p>
+                <p>⏰ Автоматический экспорт выполняется {{formatCronSchedule .CronSchedule}}</p>
                 <p>📅 Все временные метки отображаются в UTC</p>
-                <p>🔄 При ошибках система автоматически повторит попытку до 10 раз с интервалом 15-150 минут</p>
+                <p>🔄 При ошибках система автоматически повторит попытку до {{.MaxRetries}} раз с интервалом 15-150 минут</p>
             </div>
 
             {{if .Files}}
