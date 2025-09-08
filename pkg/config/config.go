@@ -59,8 +59,8 @@ func Load() (*Config, error) {
 		Token:        getEnv("TESTOPS_TOKEN", ""),
 		ExportPath:   getEnv("EXPORT_PATH", "./exports"),
 		WebPort:      getEnv("WEB_PORT", "9090"),
-		MaxRetries:   10,
-		RetryDelay:   15 * time.Minute,
+		MaxRetries:   3,
+		RetryDelay:   15 * time.Second,
 		CronSchedule: getEnv("CRON_SCHEDULE", "0 7 * * *"), // По умолчанию 7:00 UTC
 		Projects:     projectsFile.Projects,
 		// S3 конфигурация
@@ -97,18 +97,18 @@ func getEnv(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value != "" {
 		// Защищаем токен от вывода в лог
-		if key == "TESTOPS_TOKEN" || key == "S3_SECRET_KEY" {
-			if len(value) > 8 {
-				fmt.Printf("🔍 %s: '%s...%s' (из окружения)\n", key, value[:4], value[len(value)-4:])
-			} else {
-				fmt.Printf("🔍 %s: '[СКРЫТ]' (из окружения)\n", key)
-			}
-		} else {
-			fmt.Printf("🔍 %s: '%s' (из окружения)\n", key, value)
-		}
+		// if key == "TESTOPS_TOKEN" || key == "S3_SECRET_KEY" {
+		// 	if len(value) > 8 {
+		// 		fmt.Printf("🔍 %s: '%s...%s' (из окружения)\n", key, value[:4], value[len(value)-4:])
+		// 	} else {
+		// 		fmt.Printf("🔍 %s: '[СКРЫТ]' (из окружения)\n", key)
+		// 	}
+		// } else {
+		// 	fmt.Printf("🔍 %s: '%s' (из окружения)\n", key, value)
+		// }
 		return value
 	}
-	fmt.Printf("🔍 %s: '%s' (по умолчанию)\n", key, defaultValue)
+	// fmt.Printf("🔍 %s: '%s' (по умолчанию)\n", key, defaultValue)
 	return defaultValue
 }
 
@@ -116,11 +116,11 @@ func getEnv(key, defaultValue string) string {
 func getEnvBool(key string, defaultValue bool) bool {
 	value := os.Getenv(key)
 	if value == "" {
-		fmt.Printf("🔍 %s: %t (по умолчанию)\n", key, defaultValue)
+		// fmt.Printf("🔍 %s: %t (по умолчанию)\n", key, defaultValue)
 		return defaultValue
 	}
 
 	result := value == "true" || value == "1" || value == "yes"
-	fmt.Printf("🔍 %s: %t (из окружения)\n", key, result)
+	// fmt.Printf("🔍 %s: %t (из окружения)\n", key, result)
 	return result
 }

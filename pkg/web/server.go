@@ -102,6 +102,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		lastExport = lastExportTime.Format("02.01.2006 15:04:05")
 	}
 
+	// Получаем информацию о следующем экспорте
+	nextExportInfo := s.manager.GetNextExportInfo()
+	nextExport := models.NextExportInfo{
+		FormattedTime:    nextExportInfo.FormattedTime,
+		NextRunFormatted: nextExportInfo.NextRunFormatted,
+		HasError:         nextExportInfo.HasError,
+		ErrorMessage:     nextExportInfo.ErrorMessage,
+	}
+
 	data := models.PageData{
 		Files:             files,
 		TotalFiles:        fmt.Sprintf("%d", len(files)),
@@ -110,7 +119,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Projects:          projects,
 		SelectedProjectID: selectedProjectID,
 		CronSchedule:      s.config.CronSchedule,
-		MaxRetries:        s.config.MaxRetries,
+		NextExport:        nextExport,
 	}
 
 	tmpl, err := template.New("index").Funcs(template.FuncMap{
@@ -433,8 +442,11 @@ const htmlTemplate = `
 
             <div style="text-align:center; margin-bottom:20px; color:#6c757d; font-size:0.9em;">
                 <p>⏰ Автоматический экспорт выполняется {{formatCronSchedule .CronSchedule}}</p>
-                <p>📅 Все временные метки отображаются в UTC</p>
-                <p>🔄 При ошибках система автоматически повторит попытку до {{.MaxRetries}} раз с интервалом 15-150 минут</p>
+                {{if .NextExport.HasError}}
+                <p style="color:#dc3545;">❌ {{.NextExport.ErrorMessage}}</p>
+                {{else}}
+                <p style="color:#28a745;">⏳ Следующий экспорт через <strong>{{.NextExport.FormattedTime}}</strong> ({{.NextExport.NextRunFormatted}} UTC)</p>
+                {{end}}
             </div>
 
             {{if .Files}}

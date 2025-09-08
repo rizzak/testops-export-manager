@@ -15,6 +15,8 @@ import (
 	"testops-export/pkg/config"
 	"testops-export/pkg/models"
 	"testops-export/pkg/storage"
+
+	"github.com/robfig/cron/v3"
 )
 
 // Manager представляет менеджер экспорта
@@ -22,6 +24,16 @@ type Manager struct {
 	config    *config.Config
 	client    *api.Client
 	s3storage *storage.S3Storage
+}
+
+// NextExportInfo содержит информацию о следующем экспорте
+type NextExportInfo struct {
+	NextRunTime      time.Time
+	TimeUntilNext    time.Duration
+	FormattedTime    string
+	NextRunFormatted string
+	HasError         bool
+	ErrorMessage     string
 }
 
 // NewManager создает новый менеджер экспорта
@@ -386,4 +398,43 @@ func (m *Manager) DeleteExportFile(filename string) error {
 // Config возвращает конфиг менеджера
 func (m *Manager) Config() *config.Config {
 	return m.config
+}
+
+// GetNextExportInfo вычисляет время до следующего экспорта
+func (m *Manager) GetNextExportInfo() NextExportInfo {
+	now := time.Now().UTC()
+	schedule, err := cron.ParseStandard(m.config.CronSchedule)
+	if err != nil {
+		return NextExportInfo{
+			HasError:     true,
+			ErrorMessage: fmt.Sprintf("ошибка парсинга расписания: %v", err),
+		}
+	}
+
+	nextRun := schedule.Next(now)
+	timeUntilNext := nextRun.Sub(now)
+
+	// Форматируем оставшееся время в удобочитаемом виде
+	var timeStr string
+	if timeUntilNext.Hours() >= 24 {
+		days := int(timeUntilNext.Hours() / 24)
+		hours := int(timeUntilNext.Hours()) % 24
+		timeStr = fmt.Sprintf("%d дн. %d ч.", days, hours)
+	} else if timeUntilNext.Hours() >= 1 {
+		hours := int(timeUntilNext.Hours())
+		minutes := int(timeUntilNext.Minutes()) % 60
+		timeStr = fmt.Sprintf("%d ч. %d мин.", hours, minutes)
+	} else {
+		minutes := int(timeUntilNext.Minutes())
+		timeStr = fmt.Sprintf("%d мин.", minutes)
+	}
+
+	return NextExportInfo{
+		NextRunTime:      nextRun,
+		TimeUntilNext:    timeUntilNext,
+		FormattedTime:    timeStr,
+		NextRunFormatted: nextRun.Format("2006-01-02 15:04"),
+		HasError:         false,
+		ErrorMessage:     "",
+	}
 }

@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 // ExportRequest представляет запрос на экспорт тесткейсов
 type ExportRequest struct {
@@ -68,6 +70,14 @@ type ProjectInfo struct {
 	Name string
 }
 
+// NextExportInfo содержит информацию о следующем экспорте для веб-интерфейса
+type NextExportInfo struct {
+	FormattedTime    string
+	NextRunFormatted string
+	HasError         bool
+	ErrorMessage     string
+}
+
 // PageData представляет данные для веб-страницы
 type PageData struct {
 	Files             []ExportFile
@@ -76,6 +86,6 @@ type PageData struct {
 	LastExport        string
 	Projects          []ProjectInfo
 	SelectedProjectID int64
-	CronSchedule      string // Расписание cron из конфига
-	MaxRetries        int    // Количество повторных попыток из конфига
+	CronSchedule      string         // Расписание cron из конфига
+	NextExport        NextExportInfo // Информация о следующем экспорте
 }
