@@ -30,9 +30,16 @@ func RunWithLeaderElection(onLeader func(ctx context.Context)) {
 
 	id, _ := os.Hostname()
 
+	// Получаем namespace из переменной окружения или используем default
+	namespace := os.Getenv("CI_TMPL_HELM_RELEASE_NAMESPACE")
+	if namespace == "" {
+		namespace = "default"
+	}
+
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
-			Name: "testops-export-leader",
+			Name:      "testops-export-leader",
+			Namespace: namespace,
 		},
 		Client: clientset.CoordinationV1(),
 		LockConfig: resourcelock.ResourceLockConfig{
