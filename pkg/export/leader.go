@@ -32,8 +32,7 @@ func RunWithLeaderElection(onLeader func(ctx context.Context)) {
 
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
-			Name:      "testops-export-leader",
-			Namespace: "default",
+			Name: "testops-export-leader",
 		},
 		Client: clientset.CoordinationV1(),
 		LockConfig: resourcelock.ResourceLockConfig{

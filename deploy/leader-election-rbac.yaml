@@ -4,7 +4,7 @@ metadata:
   name: leader-election-sa
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: leader-election-role
 rules:
@@ -16,13 +16,28 @@ rules:
   verbs: ["get", "watch", "list", "create", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: leader-election-rolebinding
 subjects:
 - kind: ServiceAccount
   name: leader-election-sa
+  namespace: default
 roleRef:
-  kind: Role
+  kind: ClusterRole
+  name: leader-election-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Дополнительные права для vault-auth ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-leader-election-binding
+subjects:
+- kind: ServiceAccount
+  name: vault-auth
+  namespace: qa-automation
+roleRef:
+  kind: ClusterRole
   name: leader-election-role
   apiGroup: rbac.authorization.k8s.io 
