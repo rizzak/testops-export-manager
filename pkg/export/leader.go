@@ -22,6 +22,7 @@ func RunWithLeaderElection(onLeader func(ctx context.Context)) {
 		select {} // блокируем main, чтобы не выйти
 		return
 	}
+	config.TLSClientConfig.Insecure = true
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		log.Fatalf("Ошибка создания клиента: %v", err)
